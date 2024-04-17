@@ -1,0 +1,198 @@
+---
+title: "Homework9"
+author: "Christina Cui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+***
+
+#### **Name: Christina Cui**
+#### **UT EID: cc75352**
+#### **Github Link: https://github.com/ccui7247/homework9**
+
+***
+
+```{r setup, include = FALSE, message = FALSE}
+
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(MatchIt)
+library(moderndive)
+library(knitr)
+library(dplyr)
+library(mosaic)
+setwd('C:/Users/chris/OneDrive/Documents/2023-2024/SDS315/homeworks')
+turnout <- read.csv("turnout.csv")
+solder <- read.csv("solder.csv")
+
+```
+
+## **Problem 1**
+
+#### **Part A**
+
+```{r, message = FALSE}
+
+# proportion of people who received GOTV calls and voted in 1998
+got_GOTV <- sum(turnout$GOTV_call == 1)
+vote_1998_GOTV <- sum(turnout$GOTV_call == 1 & turnout$voted1998 == 1)
+voted_GOTV <- round(vote_1998_GOTV / got_GOTV, 3)
+
+# proportion of people who did not receive GOTV calls and voted in 1998
+got_no_GOTV <- sum(turnout$GOTV_call == 0)
+vote_1998_no_GOTV <- sum(turnout$GOTV_call == 0 & turnout$voted1998 == 1)
+voted_no_GOTV <- round(vote_1998_no_GOTV / got_no_GOTV, 3)
+
+# using prop.test() to find the confidence interval for the difference of 2 proportions
+prop_test <- prop.test(c(voted_GOTV * got_GOTV, voted_no_GOTV * got_no_GOTV), c(got_GOTV, got_no_GOTV), conf.level = 0.95)
+ci <- confint(prop_test)
+print(ci)
+
+```
+
+The proportion of people who did not receive GOTV calls and voted in 1998 is `r voted_no_GOTV`. The proportion of people who received GOTV calls and voted in 1998 is `r voted_GOTV`. The 95% confidence interval for the difference in proportions of those who voted in 1998 that got a GOTV call versus those who did not get the call is (0.1416, 0.2664). 
+
+***
+
+#### **Part B**
+
+```{r, message = FALSE}
+
+# barplot of those who voted in 1996 grouped by if they got a GOTV call or not
+bar_voted1996 <- ggplot(turnout, aes(x = as.factor(voted1996), fill = as.factor(GOTV_call))) +
+  geom_bar(position = "dodge", alpha = 0.8) +
+  labs(x = "voted1996", y = "Count", fill = "GOTV Call") +
+  theme_minimal()
+print(bar_voted1996)
+
+# boxplot of ages of voters grouped by if they got a GOTV call or not
+box_age <- ggplot(turnout, aes(x = as.factor(GOTV_call), y = AGE, fill = as.factor(GOTV_call))) +
+  geom_boxplot() +
+  labs(x = "GOTV Call", y = "Age", fill = "GOTV Call") +
+  theme_minimal()
+print(box_age)
+
+# barplot of voters' party affiliations (major or not) grouped by if they got a GOTV call or not
+bar_majorpty <- ggplot(turnout, aes(x = as.factor(MAJORPTY), fill = as.factor(GOTV_call))) +
+  geom_bar(position = "dodge", alpha = 0.8) +
+  labs(x = "MAJORPTY", y = "Count", fill = "GOTV Call") +
+  theme_minimal()
+print(bar_majorpty)
+
+# summary statistics of each of the confounders grouped by whether they got a GOTV call or not
+summary_stats <- turnout %>%
+  group_by(GOTV_call) %>%
+  summarise(
+    prop_voted1996 = mean(voted1996),
+    mean_age = mean(AGE),
+    prop_majorpty = mean(MAJORPTY)
+  )
+print(summary_stats)
+
+```
+As shown above by each of the plots, the distributions for people who receieved GOTV calls and people who did not have differences in terms of age, whether they are aligned with a major party or not, and whether they voted in 1996 or not. As shown by the summary statistics, these 3 variables differ based on whether the people received GOTV calls or not. Thus, due to these differences, there is evidence that MAJORPTY, AGE, and voted1996 are possible confounders of the relationship that GOTV_calls has with voted1998. 
+
+***
+
+#### **Part C**
+
+```{r, message = FALSE}
+
+# creating the matched dataset finding the balance between 3 confounders for GOTV_call variable
+matched_data <- matchit(GOTV_call ~ voted1996 + AGE + MAJORPTY, data = turnout, ratio = 5) %>%
+   match.data
+
+# verifies the balance of the matched dataset
+mean(voted1996 ~ GOTV_call, data = matched_data)
+mean(AGE ~ GOTV_call, data = matched_data)
+mean(MAJORPTY ~ GOTV_call, data = matched_data)
+
+# finds the proportion of those who voted in 1998 and had a GOTV call
+vote_GOTV <- sum(matched_data$voted1998[matched_data$GOTV_call == 1])
+total_yes_GOTV <- sum(matched_data$GOTV_call == 1)
+yes_GOTV_prop <- vote_GOTV / total_yes_GOTV
+yes_GOTV_prop <- round(yes_GOTV_prop, 3)
+
+
+# finds the proportion of those who voted in 1998 and did not get a GOTV call
+vote_no_GOTV <- sum(matched_data$voted1998[matched_data$GOTV_call == 0])
+total_no_GOTV <- sum(matched_data$GOTV_call == 0)
+no_GOTV_prop <- vote_no_GOTV / total_no_GOTV
+no_GOTV_prop <- round(no_GOTV_prop, 3)
+
+# uses prop.test() to find a 95% confidence interval for the difference in 2 proportions
+ci_matched <- prop.test(c(vote_GOTV, vote_no_GOTV), c(total_yes_GOTV, total_no_GOTV), conf.level = 0.95)
+print(ci_matched)
+
+```
+Because the average age, proportion of those who voted in 1996, and proportion of those aligned with a major party are very similar in both groups who did receive GOTV calls and groups who did not, the confounders are well balanced between the treatment and control groups. The proportion of people in the matched data who did not receive GOTV calls and voted in 1998 is `r no_GOTV_prop`. The proportion of people in the matched data who received GOTV calls and voted in 1998 is `r yes_GOTV_prop`. The confidence interval (0.0056, 0.1418) suggests that we are 95% confident that the true difference in proportions of voting in 1998 between the group that received GOTV calls and the group that did not falls between this range. Since the interval does not include 0, we can conclude that there is a statistically significant difference between the proportions, which suggests that the presence of a GOTV call had an effect on whether someone voted in 1998 or not. 
+
+***
+
+## **Problem 2**
+
+#### **Part A**
+
+```{r, message = FALSE, fig.width = 10, fig.height = 6}
+
+# plot of relationship between opening size and number of skips
+ggplot(solder, aes(x = Opening, y = skips)) +
+  geom_boxplot(fill = "skyblue", color = "blue") +
+  labs(
+    title = "Relationship Between Opening Size and Skips",
+    x = "Opening Size on Solder Gun",
+    y = "Number of Skips"
+  ) +
+  theme_minimal()
+
+```
+This plot creates individual boxplots of number of skips based on the 3 sizes of openings, grouped by small (S), medium (M), and large (L). For guns with small openings, the distribution of the number of skips is the highest, with the largest IQR, range, and highest median number of skips. Next is guns with medium openings, and then guns with large openings has the smallest IQR, range, and median. The boxplots suggest a negative relationship between size and the number of skips: as size increases, the number of skips tends to decrease. 
+
+
+```{r, message = FALSE, fig.width = 10, fig.height = 6}
+# plot of relationship between solder thickness and number of skips
+ggplot(solder, aes(x = Solder, y = skips)) +
+  geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+  labs(
+    title = "Relationship Between Solder Thickness and Skips",
+    x = "Solder Thickness",
+    y = "Number of Skips"
+  ) +
+  theme_minimal()
+
+```
+The boxplots above show the relationship of solder thickness and the number of skips, where each boxplot is either thin or thick solder thickness. The boxplot for thin solders seems to have a larger IQR, median, and range than the boxplot for thick solders. This suggests that as solder thickness increases, the number of skips tends to decrease. 
+
+***
+
+#### **Part B**
+
+```{r, message = FALSE}
+
+skips_model = lm(skips ~ Opening + Solder + Opening:Solder, data = solder)
+print(skips_model)
+coefficients_table <- get_regression_table(skips_model)
+print(coefficients_table)
+
+```
+
+***
+
+#### **Part C**
+
+The intercept is the baseline number of skips is estimated to be 0.393 when the opening size is "Large" and the solder thickness is "Thick". 
+The coefficient of 2.407 on "Opening:M"  is the estimated offset of skips when the opening size changes from "Large" to "Medium", holding solder thickness constant. 
+The coefficient of 5.127 on "Opening:S"  is the estimated offset of skips when the opening size changes from "Large" to "Small", holding solder thickness constant. 
+The coefficient of 2.280 on "Solder:Thin"  is the estimated offset of skips when the solder thickness changes from "Thick" to "Thin", holding opening size constant. 
+The coefficient of -0.740 is the estimated interaction effect. It suggests that when the opening size is "Medium" and the solder thickness is "Thin", there are fewer skips compared to when the opening is "Large" and the solder is "Thin".
+The coefficient of 9.653 is the estimated interaction effect. It suggests that when the opening size is "Small" and the solder thickness is "Thin", there are more skips compared to when the opening is "Large" and the solder is "Thin".
+
+***
+
+#### **Part D**
+
+I would recommend using a large opening size and a thick solder thickness since the coefficients for medium and small opening sizes as well as the coefficient for a thin solder thickness are all positive. The positive coefficients mean a positive offset from the baseline (large opening, thick solder) in the number of skips: thus, using anything besides a large opening and a thick solder would increase the number of skips. The interaction term between a medium opening and a thin solder only has a slight decrease from the baseline interaction term between a large opening and a thick solder; it only decreases the number of skips by about 0.74. On the other hand, the interaction term between a small opening and a thin solder has a significant increase of about 9.653 skips. Thus, a large opening size and a thick solder thickness is the best to minimize the number of skips during the manufacturing process. 
+
+***
